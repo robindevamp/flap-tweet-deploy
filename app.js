@@ -9,6 +9,7 @@ const SEED_IDS = [
 const DEFAULT_FOLLOWS = ["flapdotsh", "cz_binance", "elonmusk"];
 
 const $ = (id) => document.getElementById(id);
+
 const state = {
   view: "feed",
   tweets: load(STORE_TWEETS, []),
@@ -24,97 +25,105 @@ function load(key, fallback) {
     return fallback;
   }
 }
+
 function save() {
   localStorage.setItem(STORE_TWEETS, JSON.stringify(state.tweets.slice(0, 80)));
   localStorage.setItem(STORE_FOLLOWS, JSON.stringify(state.follows));
 }
 
-function showStatus(msg, ms = 3200) {
+function showStatus(message, ms = 3200) {
   const el = $("statusBar");
-  if (!msg) {
+  if (!message) {
     el.hidden = true;
     return;
   }
   el.hidden = false;
-  el.textContent = msg;
-  if (ms) setTimeout(() => {
-    if (el.textContent === msg) el.hidden = true;
-  }, ms);
+  el.textContent = message;
+  if (ms) {
+    setTimeout(() => {
+      if (el.textContent === message) el.hidden = true;
+    }, ms);
+  }
 }
 
 function extractTweetId(input) {
-  const s = (input || "").trim();
-  const m = s.match(/(?:status|statuses)\/(\d{5,})/);
-  if (m) return m[1];
-  if (/^\d{5,}$/.test(s)) return s;
+  const value = (input || "").trim();
+  const match = value.match(/(?:status|statuses)\/(\d{5,})/);
+  if (match) return match[1];
+  if (/^\d{5,}$/.test(value)) return value;
   return null;
 }
+
 function extractHandle(input) {
-  const s = (input || "").trim();
-  const m = s.match(/^@?([A-Za-z0-9_]{1,15})$/);
-  return m ? m[1] : null;
+  const value = (input || "").trim();
+  const match = value.match(/^@?([A-Za-z0-9_]{1,15})$/);
+  return match ? match[1] : null;
 }
 
 async function apiGet(path) {
   try {
-    const r = await fetch(path);
-    if (r.ok) return r.json();
+    const response = await fetch(path);
+    if (response.ok) return response.json();
   } catch (_) {}
+
   const idMatch = path.match(/\/tweet\/(\d+)/);
   if (idMatch) {
-    const r = await fetch(
+    const response = await fetch(
       `https://corsproxy.io/?${encodeURIComponent("https://api.fxtwitter.com/status/" + idMatch[1])}`
     );
-    const data = await r.json();
+    const data = await response.json();
     if (data && data.tweet) return normalizeClientTweet(data.tweet);
-    throw new Error(data?.message || "Khong lay duoc tweet");
+    throw new Error(data?.message || "Could not load this tweet");
   }
+
   const userMatch = path.match(/\/user\/([^/?]+)/);
   if (userMatch) {
-    const r = await fetch(
+    const response = await fetch(
       `https://corsproxy.io/?${encodeURIComponent("https://api.fxtwitter.com/" + userMatch[1])}`
     );
-    const data = await r.json();
+    const data = await response.json();
     if (data && data.user) return normalizeClientUser(data.user);
   }
-  throw new Error("API khong phan hoi");
+
+  throw new Error("API did not respond. Run python3 server.py locally for a more reliable proxy.");
 }
 
-function normalizeClientUser(u) {
+function normalizeClientUser(user) {
   return {
-    id: String(u.id || ""),
-    name: u.name || "",
-    handle: u.screen_name || "",
-    bio: u.description || "",
-    avatar: u.avatar_url || "",
-    followers: u.followers || 0,
-    url: u.url || `https://x.com/${u.screen_name}`,
+    id: String(user.id || ""),
+    name: user.name || "",
+    handle: user.screen_name || "",
+    bio: user.description || "",
+    avatar: user.avatar_url || "",
+    followers: user.followers || 0,
+    url: user.url || `https://x.com/${user.screen_name}`,
   };
 }
-function normalizeClientTweet(t) {
-  const author = t.author || {};
+
+function normalizeClientTweet(tweet) {
+  const author = tweet.author || {};
   const media = [];
-  const raw = t.media;
+  const raw = tweet.media;
   if (Array.isArray(raw)) {
-    raw.forEach((m) => {
-      if (typeof m === "string") media.push({ type: "photo", url: m });
-      else if (m && m.url) media.push({ type: m.type || "photo", url: m.url });
+    raw.forEach((item) => {
+      if (typeof item === "string") media.push({ type: "photo", url: item });
+      else if (item && item.url) media.push({ type: item.type || "photo", url: item.url });
     });
   } else if (raw && typeof raw === "object") {
-    (raw.photos || []).forEach((p) => media.push({ type: "photo", url: p.url || p }));
-    (raw.videos || []).forEach((v) =>
-      media.push({ type: "video", url: v.thumbnail_url || v.url || "" })
+    (raw.photos || []).forEach((photo) => media.push({ type: "photo", url: photo.url || photo }));
+    (raw.videos || []).forEach((video) =>
+      media.push({ type: "video", url: video.thumbnail_url || video.url || "" })
     );
   }
   return {
-    id: String(t.id || ""),
-    url: t.url || `https://x.com/i/status/${t.id}`,
-    text: t.text || "",
-    createdAt: t.created_at || "",
-    likes: t.likes || 0,
-    reposts: t.retweets || 0,
-    replies: t.replies || 0,
-    views: t.views || 0,
+    id: String(tweet.id || ""),
+    url: tweet.url || `https://x.com/i/status/${tweet.id}`,
+    text: tweet.text || "",
+    createdAt: tweet.created_at || "",
+    likes: tweet.likes || 0,
+    reposts: tweet.retweets || 0,
+    replies: tweet.replies || 0,
+    views: tweet.views || 0,
     author: {
       name: author.name || "",
       handle: author.screen_name || "",
@@ -134,21 +143,29 @@ async function fetchTweet(id) {
 
 function upsertTweet(tweet) {
   if (!tweet || !tweet.id) return;
-  state.tweets = [tweet, ...state.tweets.filter((t) => t.id !== tweet.id)];
+  state.tweets = [tweet, ...state.tweets.filter((item) => item.id !== tweet.id)];
   save();
 }
 
 function formatTime(value) {
   if (!value) return "";
-  const d = isNaN(Number(value)) ? new Date(value) : new Date(Number(value) * (String(value).length < 13 ? 1000 : 1));
-  if (Number.isNaN(d.getTime())) return String(value);
-  const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return "vua xong";
-  if (diff < 3600) return `${Math.floor(diff / 60)}p`;
+  const date = isNaN(Number(value))
+    ? new Date(value)
+    : new Date(Number(value) * (String(value).length < 13 ? 1000 : 1));
+  if (Number.isNaN(date.getTime())) return String(value);
+  const diff = (Date.now() - date.getTime()) / 1000;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  return d.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
-function nfmt(n) {
+
+function formatCount(n) {
   n = Number(n) || 0;
   if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
   if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
@@ -163,62 +180,62 @@ function suggestToken(tweet) {
     .replace(/[@#]\w+/g, "")
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 1);
+    .filter((word) => word.length > 1);
   const name =
     words.slice(0, 3).join(" ").slice(0, 28) ||
     (tweet.author?.name ? `${tweet.author.name} Coin` : "Tweet Token");
   let symbol = dollar ? dollar[1] : "";
   if (!symbol) {
-    const caps = words.filter((w) => /^[A-Z0-9]{2,6}$/.test(w));
-    symbol = (caps[0] || words.map((w) => w[0]).join("").replace(/[^A-Za-z0-9]/g, "")).slice(0, 8);
+    const caps = words.filter((word) => /^[A-Z0-9]{2,6}$/.test(word));
+    symbol = (caps[0] || words.map((word) => word[0]).join("").replace(/[^A-Za-z0-9]/g, "")).slice(0, 8);
   }
   symbol = (symbol || "TWEET").toUpperCase();
   return { name, symbol, desc: text.slice(0, 280) };
 }
 
-function tweetHTML(t, { big = false } = {}) {
-  const media = (t.media || [])
-    .filter((m) => m.url)
+function tweetHTML(tweet, { big = false } = {}) {
+  const media = (tweet.media || [])
+    .filter((item) => item.url)
     .slice(0, 4)
-    .map((m) => `<img src="${esc(m.url)}" alt="" />`)
+    .map((item) => `<img src="${esc(item.url)}" alt="" />`)
     .join("");
   return `
     <div class="meta">
-      <img class="avatar" src="${esc(t.author?.avatar || "")}" alt="" onerror="this.style.opacity=.2" />
+      <img class="avatar" src="${esc(tweet.author?.avatar || "")}" alt="" onerror="this.style.opacity=.2" />
       <div class="who">
-        <b>${esc(t.author?.name || "Unknown")}</b>
-        <span>@${esc(t.author?.handle || "")}</span>
+        <b>${esc(tweet.author?.name || "Unknown")}</b>
+        <span>@${esc(tweet.author?.handle || "")}</span>
       </div>
-      <div class="when">${esc(formatTime(t.createdAt))}</div>
+      <div class="when">${esc(formatTime(tweet.createdAt))}</div>
     </div>
-    <div class="text">${esc(t.text || "")}</div>
+    <div class="text">${esc(tweet.text || "")}</div>
     ${media ? `<div class="media">${media}</div>` : ""}
     <div class="stats">
-      <span>\u2665 ${nfmt(t.likes)}</span>
-      <span>\u21bb ${nfmt(t.reposts)}</span>
-      <span>\ud83d\udcac ${nfmt(t.replies)}</span>
+      <span>♥ ${formatCount(tweet.likes)}</span>
+      <span>↻ ${formatCount(tweet.reposts)}</span>
+      <span>💬 ${formatCount(tweet.replies)}</span>
     </div>
-    ${big ? "" : `<div class="cta-row"><button class="btn primary" data-deploy="${t.id}">Deploy token</button></div>`}
+    ${big ? "" : `<div class="cta-row"><button class="btn primary" data-deploy="${tweet.id}">Launch token</button></div>`}
   `;
 }
 
-function esc(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function esc(value) {
+  return String(value)
+    .replace(/&/g, "&")
+    .replace(/</g, "<")
+    .replace(/>/g, ">")
+    .replace(/"/g, """);
 }
 
 function renderFeed() {
   const feed = $("feed");
   $("emptyState").hidden = state.tweets.length > 0;
   feed.innerHTML = state.tweets
-    .map((t) => `<article class="tweet-card" data-open="${t.id}">${tweetHTML(t)}</article>`)
+    .map((tweet) => `<article class="tweet-card" data-open="${tweet.id}">${tweetHTML(tweet)}</article>`)
     .join("");
   feed.querySelectorAll("[data-open]").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      if (e.target.closest("a")) return;
+    el.addEventListener("click", (event) => {
+      if (event.target.closest("a")) return;
       openDeploy(el.getAttribute("data-open"));
     });
   });
@@ -226,53 +243,53 @@ function renderFeed() {
 
 function renderChips() {
   $("followChips").innerHTML = state.follows
-    .map((h) => `<span class="chip" data-h="${esc(h)}">@${esc(h)} <span class="x" data-un="${esc(h)}">\u00d7</span></span>`)
+    .map((handle) => `<span class="chip">@${esc(handle)} <span class="x" data-un="${esc(handle)}">×</span></span>`)
     .join("");
-  $("followChips").querySelectorAll("[data-un]").forEach((x) => {
-    x.addEventListener("click", (e) => {
-      e.stopPropagation();
-      unfollow(x.getAttribute("data-un"));
+  $("followChips").querySelectorAll("[data-un]").forEach((el) => {
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      unfollow(el.getAttribute("data-un"));
     });
   });
 }
 
 function renderFollowList() {
-  const ul = $("followList");
-  ul.innerHTML = state.follows
-    .map((h) => `
+  const list = $("followList");
+  list.innerHTML = state.follows
+    .map((handle) => `
       <li>
         <div class="grow">
-          <b>@${esc(h)}</b>
-          <small>Profile cong khai</small>
+          <b>@${esc(handle)}</b>
+          <small>Public profile · add posts by URL</small>
         </div>
-        <a class="btn ghost" href="https://x.com/${esc(h)}" target="_blank" rel="noopener">X</a>
-        <button class="btn danger ghost" data-un="${esc(h)}">Bo</button>
+        <a class="btn ghost" href="https://x.com/${esc(handle)}" target="_blank" rel="noopener">X</a>
+        <button class="btn danger ghost" data-un="${esc(handle)}">Unfollow</button>
       </li>`)
     .join("");
-  ul.querySelectorAll("[data-un]").forEach((b) =>
-    b.addEventListener("click", () => unfollow(b.getAttribute("data-un")))
+  list.querySelectorAll("[data-un]").forEach((button) =>
+    button.addEventListener("click", () => unfollow(button.getAttribute("data-un")))
   );
 }
 
 function setView(name) {
   state.view = name;
-  ["feed", "following", "deploy"].forEach((v) => {
-    $(`view-${v}`).hidden = v !== name;
+  ["feed", "following", "deploy"].forEach((view) => {
+    $(`view-${view}`).hidden = view !== name;
   });
-  document.querySelectorAll(".nav-btn").forEach((b) => {
-    b.classList.toggle("active", b.dataset.view === name);
+  document.querySelectorAll(".nav-btn").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === name);
   });
 }
 
 function openDeploy(id) {
-  const tweet = state.tweets.find((t) => t.id === id);
+  const tweet = state.tweets.find((item) => item.id === id);
   if (!tweet) return;
   state.current = tweet;
   $("deployTweet").innerHTML = tweetHTML(tweet, { big: true });
-  const sug = suggestToken(tweet);
-  $("tokName").value = sug.name;
-  $("tokSymbol").value = sug.symbol;
-  $("tokDesc").value = sug.desc;
+  const suggestion = suggestToken(tweet);
+  $("tokName").value = suggestion.name;
+  $("tokSymbol").value = suggestion.symbol;
+  $("tokDesc").value = suggestion.desc;
   $("openTweet").href = tweet.url;
   updateFlapLink();
   setView("deploy");
@@ -290,14 +307,14 @@ async function ingest(raw) {
   const id = extractTweetId(value);
   const handle = extractHandle(value);
   if (id) {
-    showStatus("Dang lay tweet...");
+    showStatus("Loading tweet…");
     try {
       const tweet = await fetchTweet(id);
       upsertTweet(tweet);
       renderFeed();
-      showStatus(`Da nap tweet cua @${tweet.author.handle}`);
-    } catch (e) {
-      showStatus(e.message || "Loi lay tweet");
+      showStatus(`Added tweet from @${tweet.author.handle}`);
+    } catch (error) {
+      showStatus(error.message || "Failed to load tweet");
     }
     return;
   }
@@ -305,7 +322,7 @@ async function ingest(raw) {
     await follow(handle);
     return;
   }
-  showStatus("Khong nhan ra URL / @handle / tweet ID.");
+  showStatus("Could not parse that as a tweet URL, tweet ID, or @handle.");
 }
 
 async function follow(handle) {
@@ -316,11 +333,17 @@ async function follow(handle) {
   }
   renderChips();
   renderFollowList();
-  showStatus(`Da theo doi @${handle}. Dan URL tweet de nap vao feed.`);
+  showStatus(`Looking up @${handle}…`);
+  try {
+    const user = await apiGet(`/api/user/${handle}`);
+    showStatus(`Now following @${user.handle || handle}. Paste a tweet URL to add it to the feed.`);
+  } catch {
+    showStatus(`Saved @${handle}. Paste a tweet URL to add it to the feed.`);
+  }
 }
 
 function unfollow(handle) {
-  state.follows = state.follows.filter((h) => h.toLowerCase() !== handle.toLowerCase());
+  state.follows = state.follows.filter((item) => item.toLowerCase() !== handle.toLowerCase());
   save();
   renderChips();
   renderFollowList();
@@ -328,55 +351,57 @@ function unfollow(handle) {
 
 async function seedIfEmpty() {
   if (state.tweets.length) return;
+  showStatus("Loading sample tweets…", 8000);
   for (const id of SEED_IDS) {
     try {
-      const t = await fetchTweet(id);
-      upsertTweet(t);
+      const tweet = await fetchTweet(id);
+      upsertTweet(tweet);
     } catch (_) {}
   }
   renderFeed();
+  if (state.tweets.length) showStatus("Loaded sample tweets from @flapdotsh");
 }
 
 async function refreshKnown() {
-  const ids = state.tweets.slice(0, 8).map((t) => t.id);
-  let n = 0;
+  const ids = state.tweets.slice(0, 8).map((tweet) => tweet.id);
+  let count = 0;
   for (const id of ids) {
     try {
-      const t = await fetchTweet(id);
-      upsertTweet(t);
-      n++;
+      const tweet = await fetchTweet(id);
+      upsertTweet(tweet);
+      count++;
     } catch (_) {}
   }
   renderFeed();
-  if (n) showStatus(`Da lam moi ${n} tweet`);
+  if (count) showStatus(`Refreshed ${count} tweet${count === 1 ? "" : "s"}`);
 }
 
 function copyBotCommand() {
-  const t = state.current;
-  if (!t) return;
+  const tweet = state.current;
+  if (!tweet) return;
   const symbol = $("tokSymbol").value.toUpperCase() || "TICKER";
   const name = $("tokName").value || "Token";
-  const text = `@FlaprBot launch ${symbol} "${name}"\n${t.url}`;
+  const text = `@FlaprBot launch ${symbol} "${name}"\n${tweet.url}`;
   navigator.clipboard.writeText(text).then(
-    () => showStatus("Da copy lenh. Dan vao X va mention bot."),
+    () => showStatus("Copied. Paste it on X and mention the bot."),
     () => showStatus(text, 8000)
   );
 }
 
 function bind() {
-  $("ingestForm").addEventListener("submit", (e) => {
-    e.preventDefault();
+  $("ingestForm").addEventListener("submit", (event) => {
+    event.preventDefault();
     ingest($("ingestInput").value);
     $("ingestInput").value = "";
   });
-  $("followForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const parts = $("followInput").value.split(/[\s,]+/).filter(Boolean);
-    parts.forEach(follow);
+  $("followForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const handles = $("followInput").value.split(/[\s,]+/).filter(Boolean);
+    handles.forEach(follow);
     $("followInput").value = "";
   });
-  document.querySelectorAll(".nav-btn").forEach((b) =>
-    b.addEventListener("click", () => setView(b.dataset.view))
+  document.querySelectorAll(".nav-btn").forEach((button) =>
+    button.addEventListener("click", () => setView(button.dataset.view))
   );
   $("goHome").addEventListener("click", () => setView("feed"));
   $("backBtn").addEventListener("click", () => setView("feed"));
