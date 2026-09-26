@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlapTweet — Deploy token từ bất kỳ tweet nào</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+
+  <header class="topbar">
+    <div class="brand" id="goHome">
+      <span class="logo">🦋</span>
+      <div>
+        <strong>FlapTweet</strong>
+        <small>tweet → token trên flap.sh</small>
+      </div>
+    </div>
+    <nav>
+      <button class="nav-btn active" data-view="feed">Feed</button>
+      <button class="nav-btn" data-view="following">Theo dõi</button>
+      <a class="nav-link" href="https://flap.sh/create" target="_blank" rel="noopener">flap.sh</a>
+    </nav>
+    <div class="live-pill" title="Tự làm mới mỗi 25 giây">
+      <span class="dot"></span>
+      LIVE
+    </div>
+  </header>
+
+  <main id="view-feed" class="view">
+    <section class="hero">
+      <p class="kicker">BNB Chain · Flap Protocol</p>
+      <h1>Bấm một tweet.<br />Deploy token trong vài giây.</h1>
+      <p class="lede">
+        Dán URL bất kỳ bài đăng X nào, hoặc theo dõi các handle bạn quan tâm.
+        App kéo nội dung + ảnh, gợi ý ticker, rồi mở thẳng trang tạo token trên
+        <a href="https://flap.sh/create" target="_blank" rel="noopener">flap.sh</a>.
+      </p>
+    </section>
+
+    <form id="ingestForm" class="ingest">
+      <div class="ingest-row">
+        <input
+          id="ingestInput"
+          type="text"
+          autocomplete="off"
+          placeholder="Dán link tweet  ·  x.com/user/status/123  ·  hoặc @handle"
+        />
+        <button type="submit" class="btn primary">Nạp vào feed</button>
+      </div>
+      <p class="hint">
+        Hỗ trợ x.com / twitter.com / tweet ID. Handle sẽ được thêm vào danh sách theo dõi.
+      </p>
+    </form>
+
+    <div class="toolbar">
+      <div class="chips" id="followChips"></div>
+      <div class="toolbar-actions">
+        <button class="btn ghost" id="refreshBtn">Làm mới</button>
+        <button class="btn ghost" id="clearFeedBtn">Xóa feed</button>
+      </div>
+    </div>
+
+    <div id="statusBar" class="status" hidden></div>
+    <div id="feed" class="feed"></div>
+    <p class="empty" id="emptyState">
+      Feed trống. Dán một URL tweet ở trên — hoặc thêm @handle ở tab Theo dõi.
+    </p>
+  </main>
+
+  <main id="view-following" class="view" hidden>
+    <section class="panel">
+      <h2>Người bạn theo dõi</h2>
+      <p class="lede sm">
+        Lưu handle trong trình duyệt. X không còn API miễn phí cho timeline,
+        nên app lấy <em>profile</em> công khai và bạn nạp tweet bằng URL.
+      </p>
+      <form id="followForm" class="ingest">
+        <div class="ingest-row">
+          <input id="followInput" type="text" placeholder="@elonmusk  @flapdotsh  cz_binance" />
+          <button class="btn primary" type="submit">Theo dõi</button>
+        </div>
+      </form>
+      <ul id="followList" class="follow-list"></ul>
+    </section>
+  </main>
+
+  <main id="view-deploy" class="view" hidden>
+    <button class="back" id="backBtn">← Quay lại feed</button>
+    <div class="deploy-grid">
+      <article class="tweet-card big" id="deployTweet"></article>
+      <form id="deployForm" class="panel deploy-form">
+        <h2>Deploy nhanh trên Flap</h2>
+        <label>Tên token
+          <input name="name" id="tokName" maxlength="32" required />
+        </label>
+        <label>Ticker
+          <input name="symbol" id="tokSymbol" maxlength="10" required class="mono" />
+        </label>
+        <label>Mô tả
+          <textarea name="desc" id="tokDesc" rows="4"></textarea>
+        </label>
+        <div class="row2">
+          <label>Quote
+            <select id="tokQuote">
+              <option value="BNB" selected>BNB</option>
+              <option value="USDT">USDT</option>
+              <option value="USDC">USDC</option>
+              <option value="USD1">USD1</option>
+              <option value="ETH">ETH</option>
+              <option value="SOL">SOL</option>
+            </select>
+          </label>
+          <label>Loại
+            <select id="tokType">
+              <option value="tax" selected>Tax token (khuyên dùng)</option>
+              <option value="standard">Non-tax</option>
+            </select>
+          </label>
+        </div>
+        <div class="actions">
+          <a id="openFlap" class="btn primary lg" target="_blank" rel="noopener">Mở flap.sh và tạo token</a>
+          <button type="button" class="btn ghost" id="copyBot">Copy lệnh tweet @FlaprBot</button>
+          <a id="openTweet" class="btn ghost" target="_blank" rel="noopener">Mở tweet gốc</a>
+        </div>
+        <ol class="steps">
+          <li>App đã điền name / ticker / description từ tweet.</li>
+          <li>Bấm <b>Mở flap.sh</b> → dán name + ticker, upload ảnh tweet (nếu có).</li>
+          <li>Gắn link tweet vào phần Links / Twitter.</li>
+          <li>Hoặc tweet: <code>$TICKER mô tả @flapdotsh</code> kèm ảnh.</li>
+        </ol>
+      </form>
+    </div>
+  </main>
+
+  <footer>
+    Không phải sản phẩm chính thức của Flap. Token launch là on-chain, tự chịu rủi ro.
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
