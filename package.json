@@ -1,0 +1,5 @@
+{
+  "name": "flap-tweet-deploy",
+  "private": true,
+  "description": "Static site — no build step"
+}
